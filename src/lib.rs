@@ -65,6 +65,10 @@ extern crate nix;
 extern crate winapi;
 #[cfg(target_os = "windows")]
 use winapi::shared::guiddef::GUID;
+#[cfg(macos_native)]
+extern crate io_kit_sys;
+#[cfg(macos_native)]
+extern crate core_foundation_sys;
 
 mod error;
 mod ffi;
@@ -76,7 +80,10 @@ mod ioctl;
 #[cfg(linux_native)]
 #[cfg_attr(docsrs, doc(cfg(linux_native)))]
 mod linux_native;
-#[cfg(target_os = "macos")]
+#[cfg(macos_native)]
+#[cfg_attr(docsrs, doc(cfg(macos_native)))]
+mod macos_native;
+#[cfg(all(target_os = "macos", hidapi))]
 #[cfg_attr(docsrs, doc(cfg(target_os = "macos")))]
 mod macos;
 #[cfg(target_os = "windows")]
@@ -96,6 +103,8 @@ pub use error::HidError;
 use hidapi::HidApiBackend;
 #[cfg(linux_native)]
 use linux_native::HidApiBackend;
+#[cfg(macos_native)]
+use macos_native::HidApiBackend;
 
 pub type HidResult<T> = Result<T, HidError>;
 
