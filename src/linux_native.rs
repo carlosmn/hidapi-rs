@@ -6,7 +6,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Cursor, Read, Seek, SeekFrom},
     os::{
-        fd::{AsRawFd, OwnedFd},
+        fd::{AsRawFd, OwnedFd, RawFd},
         unix::{ffi::OsStringExt, fs::OpenOptionsExt},
     },
     path::{Path, PathBuf},
@@ -479,6 +479,31 @@ impl HidDevice {
     }
 }
 
+/// Poll the socket and wait for it to return that we can read something
+///
+/// Returns an error if the poll does so. Otherwise returns whether we should
+/// expect something to read.
+fn wait_for_read(fd: RawFd, timeout: i32) -> HidResult<bool> {
+    let pollfd = PollFd::new(fd, PollFlags::POLLIN);
+    let res = poll(&mut [pollfd], timeout)?;
+
+    if res == 0 {
+        return Ok(false);
+    }
+
+    let events = pollfd
+        .revents()
+        .map(|e| e.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL));
+
+    if events.is_none() || events == Some(true) {
+        return Err(HidError::HidApiError {
+            message: "unexpected poll error (device disconnected)".into(),
+        });
+    }
+
+    Ok(true)
+}
+
 impl HidDeviceBackendBase for HidDevice {
     fn write(&self, data: &[u8]) -> HidResult<usize> {
         if data.is_empty() {
@@ -505,21 +530,8 @@ impl HidDeviceBackendBase for HidDevice {
     }
 
     fn read_timeout(&self, buf: &mut [u8], timeout: i32) -> HidResult<usize> {
-        let pollfd = PollFd::new(self.fd.as_raw_fd(), PollFlags::POLLIN);
-        let res = poll(&mut [pollfd], timeout)?;
-
-        if res == 0 {
+        if !wait_for_read(self.fd.as_raw_fd(), timeout)? {
             return Ok(0);
-        }
-
-        let events = pollfd
-            .revents()
-            .map(|e| e.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL));
-
-        if events.is_none() || events == Some(true) {
-            return Err(HidError::HidApiError {
-                message: "unexpected poll error (device disconnected)".into(),
-            });
         }
 
         match read(self.fd.as_raw_fd(), buf) {
