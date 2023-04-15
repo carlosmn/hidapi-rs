@@ -1,6 +1,7 @@
 [package]
 name = "hidapi"
 version = "2.2.2"
+edition = "2018"
 authors = [
     "Roland Ruckerbauer <roland.rucky@gmail.com>",
     "Osspial <osspial@gmail.com>",
@@ -19,6 +20,7 @@ documentation = "https://docs.rs/hidapi"
 
 [features]
 default = ["linux-static-hidraw", "illumos-static-libusb"]
+async = ["dep:futures"]
 linux-static-libusb = []
 linux-static-hidraw = []
 linux-shared-libusb = []
@@ -30,6 +32,7 @@ macos-shared-device = []
 
 [dependencies]
 libc = "0.2"
+futures = { version = "0.3", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 udev = { version = "0.7", optional = true }

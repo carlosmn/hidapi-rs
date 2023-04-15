@@ -37,6 +37,7 @@
 //!
 //! # Feature flags
 //!
+//! - `async`: enable the async functions (must be paired with a supported backend)
 //! - `linux-static-libusb`: uses statically linked `libusb` backend on Linux
 //! - `linux-static-hidraw`: uses statically linked `hidraw` backend on Linux (default)
 //! - `linux-shared-libusb`: uses dynamically linked `libusb` backend on Linux
@@ -83,12 +84,19 @@ mod macos;
 #[cfg_attr(docsrs, doc(cfg(target_os = "windows")))]
 mod windows;
 
+// Catch async being enabled with an unsupported backend
+#[cfg(all(feature = "async", not(feature = "linux-native")))]
+compile_error!("async is only supported for some backends");
+
 use libc::wchar_t;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::Mutex;
+
+#[cfg(feature = "async")]
+use futures::future::BoxFuture;
 
 pub use error::HidError;
 
@@ -439,6 +447,14 @@ trait HidDeviceBackendBase {
             message: "get_indexed_string: not supported".to_string(),
         })
     }
+
+    /// Write async and return a boxed future to wait on
+    #[cfg(feature = "async")]
+    fn async_write<'a>(&self, data: &'a [u8]) -> BoxFuture<'a, HidResult<usize>>;
+
+    /// Read async and return a boxed future to wait on
+    #[cfg(feature = "async")]
+    fn async_read<'a>(&self, buf: &'a mut [u8]) -> BoxFuture<'a, HidResult<usize>>;
 }
 
 /// A trait with the extra methods that are available on macOS
@@ -522,6 +538,23 @@ impl HidDevice {
     /// uses numbered reports.
     pub fn read(&self, buf: &mut [u8]) -> HidResult<usize> {
         self.inner.read(buf)
+    }
+
+    /// Write asynchronously to the device.
+    ///
+    /// See [`write`][`Self::write`] for more information.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub async fn async_write(&self, data: &[u8]) -> HidResult<usize> {
+        self.inner.async_write(data).await
+    }
+    /// Read asynchronously from the device
+    ///
+    /// See [`read`][`Self::read`] for more information.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub async fn async_read(&self, buf: &mut [u8]) -> HidResult<usize> {
+        self.inner.async_read(buf).await
     }
 
     /// Input reports are returned to the host through the 'INTERRUPT IN'

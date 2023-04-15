@@ -12,6 +12,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[cfg(feature = "async")]
+use futures::future::BoxFuture;
+
 use nix::{
     errno::Errno,
     poll::{poll, PollFd, PollFlags},
@@ -485,10 +488,20 @@ impl HidDeviceBackendBase for HidDevice {
         Ok(write(self.fd.as_raw_fd(), data)?)
     }
 
+    #[cfg(feature = "async")]
+    fn async_write<'a>(&self, data: &'a [u8]) -> BoxFuture<'a, HidResult<usize>> {
+        todo!();
+    }
+
     fn read(&self, buf: &mut [u8]) -> HidResult<usize> {
         // If the caller asked for blocking, -1 makes us wait forever
         let timeout = if self.blocking.get() { -1 } else { 0 };
         self.read_timeout(buf, timeout)
+    }
+
+    #[cfg(feature = "async")]
+    fn async_read<'a>(&self, buf: &'a mut [u8]) -> BoxFuture<'a, HidResult<usize>> {
+        todo!();
     }
 
     fn read_timeout(&self, buf: &mut [u8], timeout: i32) -> HidResult<usize> {
