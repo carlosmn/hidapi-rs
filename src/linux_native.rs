@@ -13,7 +13,7 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use futures::future::BoxFuture;
+use futures::future::{self, BoxFuture};
 
 use nix::{
     errno::Errno,
@@ -515,7 +515,8 @@ impl HidDeviceBackendBase for HidDevice {
 
     #[cfg(feature = "async")]
     fn async_write<'a>(&self, data: &'a [u8]) -> BoxFuture<'a, HidResult<usize>> {
-        todo!();
+        // The writes into hidraw should all finish quickly without waiting
+        Box::pin(future::ready(self.write(data)))
     }
 
     fn read(&self, buf: &mut [u8]) -> HidResult<usize> {
