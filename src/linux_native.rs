@@ -14,6 +14,8 @@ use std::{
 
 #[cfg(feature = "async")]
 use futures::future::{self, BoxFuture};
+#[cfg(feature = "async-tokio")]
+use tokio::io::unix::AsyncFd;
 
 use nix::{
     errno::Errno,
@@ -527,7 +529,21 @@ impl HidDeviceBackendBase for HidDevice {
 
     #[cfg(feature = "async")]
     fn async_read<'a>(&self, buf: &'a mut [u8]) -> BoxFuture<'a, HidResult<usize>> {
-        todo!();
+        let fd = match AsyncFd::new(self.fd.as_raw_fd()) {
+            Ok(fd) => fd,
+            Err(e) => return Box::pin(future::ready(Err(e.into()))),
+        };
+
+        Box::pin(async move {
+            loop {
+                let mut guard = fd.readable().await?;
+                match guard.try_io(|afd| read(afd.get_ref().as_raw_fd(), buf).map_err(|e| e.into()))
+                {
+                    Ok(result) => break result.map_err(|e| e.into()),
+                    Err(_would_block) => continue,
+                }
+            }
+        })
     }
 
     fn read_timeout(&self, buf: &mut [u8], timeout: i32) -> HidResult<usize> {

@@ -37,7 +37,7 @@
 //!
 //! # Feature flags
 //!
-//! - `async`: enable the async functions (must be paired with a supported backend)
+//! - `async-tokio`: enable async with tokio
 //! - `linux-static-libusb`: uses statically linked `libusb` backend on Linux
 //! - `linux-static-hidraw`: uses statically linked `hidraw` backend on Linux (default)
 //! - `linux-shared-libusb`: uses dynamically linked `libusb` backend on Linux
@@ -85,7 +85,7 @@ mod macos;
 mod windows;
 
 // Catch async being enabled with an unsupported backend
-#[cfg(all(feature = "async", not(feature = "linux-native")))]
+#[cfg(all(feature = "async-tokio", not(feature = "linux-native")))]
 compile_error!("async is only supported for some backends");
 
 use libc::wchar_t;
