@@ -66,9 +66,9 @@ extern crate winapi;
 #[cfg(target_os = "windows")]
 use winapi::shared::guiddef::GUID;
 #[cfg(macos_native)]
-extern crate io_kit_sys;
-#[cfg(macos_native)]
 extern crate core_foundation_sys;
+#[cfg(macos_native)]
+extern crate io_kit_sys;
 
 mod error;
 mod ffi;
@@ -80,12 +80,12 @@ mod ioctl;
 #[cfg(linux_native)]
 #[cfg_attr(docsrs, doc(cfg(linux_native)))]
 mod linux_native;
-#[cfg(macos_native)]
-#[cfg_attr(docsrs, doc(cfg(macos_native)))]
-mod macos_native;
 #[cfg(all(target_os = "macos", hidapi))]
 #[cfg_attr(docsrs, doc(cfg(target_os = "macos")))]
 mod macos;
+#[cfg(macos_native)]
+#[cfg_attr(docsrs, doc(cfg(macos_native)))]
+mod macos_native;
 #[cfg(target_os = "windows")]
 #[cfg_attr(docsrs, doc(cfg(target_os = "windows")))]
 mod windows;
@@ -134,6 +134,9 @@ fn lazy_init(do_enumerate: bool) -> HidResult<()> {
             if unsafe { ffi::hid_init() } == -1 {
                 return Err(HidError::InitializationError);
             }
+
+            #[cfg(feature = "macos-native")]
+            macos_native::hid_init()?;
 
             #[cfg(all(target_os = "macos", feature = "macos-shared-device"))]
             unsafe {

@@ -1,8 +1,82 @@
-//! This backend uses the macOS HID manager to talk to HID devices
+//! This backend uses the Marcos HID manager to talk to HID devices
 
-use std::ffi::CStr;
+use libc::c_void;
+use std::{ffi::CStr, ptr, sync::Mutex};
 
-use crate::{DeviceInfo, HidDeviceBackendBase, HidDeviceBackendMacos, HidResult};
+use core_foundation_sys::{
+    base::{kCFAllocatorDefault, CFRelease},
+    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent},
+};
+use io_kit_sys::hid::manager::{
+    kIOHIDManagerOptionNone, IOHIDManagerClose, IOHIDManagerCreate, IOHIDManagerRef,
+    IOHIDManagerScheduleWithRunLoop, IOHIDManagerSetDeviceMatching,
+};
+
+use crate::{DeviceInfo, HidDeviceBackendBase, HidDeviceBackendMacos, HidError, HidResult};
+
+static HID_MANAGER: Mutex<Option<HidManager>> = Mutex::new(None);
+
+/// Struct wrapping the manager so we can do rusty stuff
+#[repr(transparent)]
+struct HidManager(IOHIDManagerRef);
+
+unsafe impl Send for HidManager {}
+
+impl HidManager {
+    pub fn new() -> Option<Self> {
+        let mgr = unsafe { IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDManagerOptionNone) };
+
+        if mgr.is_null() {
+            None
+        } else {
+            Some(Self(mgr))
+        }
+    }
+
+    pub fn close(&mut self) {
+        unsafe { IOHIDManagerClose(self.0, kIOHIDManagerOptionNone) };
+    }
+}
+
+impl Drop for HidManager {
+    fn drop(&mut self) {
+        unsafe {
+            CFRelease(self.0 as *const c_void);
+        }
+    }
+}
+
+pub fn hid_init() -> HidResult<()> {
+    let manager = HID_MANAGER.lock().unwrap();
+    if manager.is_none() {
+        // TODO: set open exclusive and store if we're on macOS >= 10.10
+        if let Some(mgr) = HidManager::new() {
+            unsafe {
+                IOHIDManagerSetDeviceMatching(mgr.0, ptr::null());
+                IOHIDManagerScheduleWithRunLoop(
+                    mgr.0,
+                    CFRunLoopGetCurrent(),
+                    kCFRunLoopDefaultMode,
+                );
+            }
+            return Ok(());
+        } else {
+            return Err(HidError::InitializationError);
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn hid_exit() -> HidResult<()> {
+    // Take the manager and let the Drop clean it
+    let mgr = HID_MANAGER.lock().unwrap().take();
+    if let Some(mut mgr) = mgr {
+        mgr.close();
+    }
+    Ok(())
+}
 
 pub struct HidApiBackend;
 
