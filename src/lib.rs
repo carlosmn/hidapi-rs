@@ -285,6 +285,42 @@ impl Into<Option<String>> for WcharString {
     }
 }
 
+/// Converts a pointer to a `*const wchar_t` to a WcharString.
+unsafe fn wchar_to_string(wstr: *const wchar_t) -> WcharString {
+    if wstr.is_null() {
+        return WcharString::None;
+    }
+
+    let mut char_vector: Vec<char> = Vec::with_capacity(8);
+    let mut raw_vector: Vec<wchar_t> = Vec::with_capacity(8);
+    let mut index: isize = 0;
+    let mut invalid_char = false;
+
+    let o = |i| *wstr.offset(i);
+
+    while o(index) != 0 {
+        use std::char;
+
+        raw_vector.push(*wstr.offset(index));
+
+        if !invalid_char {
+            if let Some(c) = char::from_u32(o(index) as u32) {
+                char_vector.push(c);
+            } else {
+                invalid_char = true;
+            }
+        }
+
+        index += 1;
+    }
+
+    if !invalid_char {
+        WcharString::String(char_vector.into_iter().collect())
+    } else {
+        WcharString::Raw(raw_vector)
+    }
+}
+
 /// The underlying HID bus type.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
