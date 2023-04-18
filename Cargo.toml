@@ -28,7 +28,7 @@ illumos-static-libusb = []
 illumos-shared-libusb = []
 macos-shared-device = []
 macos-static-hidraw = []
-macos-native = ["dep:io-kit-sys", "dep:core-foundation-sys"]
+macos-native = ["dep:io-kit-sys", "dep:core-foundation-sys", "dep:mach2"]
 
 [dependencies]
 libc = "0.2"
@@ -40,6 +40,7 @@ nix = { version = "0.26", optional = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 io-kit-sys = { version = "0.3", optional = true }
 core-foundation-sys = { version = "0.8", optional = true }
+mach2 = { version = "0.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = "0.3.9"
