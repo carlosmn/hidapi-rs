@@ -68,6 +68,8 @@ use winapi::shared::guiddef::GUID;
 #[cfg(macos_native)]
 extern crate mach2;
 #[cfg(macos_native)]
+extern crate core_foundation;
+#[cfg(macos_native)]
 extern crate core_foundation_sys;
 #[cfg(macos_native)]
 extern crate io_kit_sys;

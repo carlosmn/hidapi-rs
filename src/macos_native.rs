@@ -10,14 +10,18 @@ use std::{
     sync::Mutex,
 };
 
+use core_foundation::{
+    base::{FromVoid, TCFType},
+    number::CFNumber,
+    set::CFSet,
+};
 use core_foundation_sys::{
     base::{kCFAllocatorDefault, Boolean, CFComparisonResult, CFGetTypeID, CFRange, CFRelease},
-    number::{kCFNumberSInt32Type, CFNumberGetTypeID, CFNumberGetValue, CFNumberRef},
     runloop::{
         kCFRunLoopDefaultMode, kCFRunLoopRunFinished, kCFRunLoopRunTimedOut, CFRunLoopGetCurrent,
         CFRunLoopRunInMode,
     },
-    set::{CFSetGetCount, CFSetGetValues},
+    set::CFSetGetValues,
     string::{
         kCFStringEncodingUTF8, CFStringCompareFlags, CFStringGetBytes, CFStringGetCStringPtr,
         CFStringGetLength, CFStringGetTypeID, CFStringRef,
@@ -143,20 +147,12 @@ struct Device(IOHIDDeviceRef);
 
 impl Device {
     pub fn int_property(&self, key: CFStringRef) -> i32 {
-        unsafe {
-            let p = IOHIDDeviceGetProperty(self.0, key);
-            if !p.is_null() && CFGetTypeID(p) == CFNumberGetTypeID() {
-                let mut value: i32 = 0;
-                CFNumberGetValue(
-                    p as CFNumberRef,
-                    kCFNumberSInt32Type,
-                    &mut value as *mut i32 as *mut _,
-                );
-                return value;
-            }
-
-            0
+        let p = unsafe { IOHIDDeviceGetProperty(self.0, key) };
+        if p.is_null() {
+            return 0;
         }
+        let n = unsafe { CFNumber::from_void(p) };
+        n.to_i32().unwrap_or(0)
     }
 
     pub fn string_property(&self, prop: CFStringRef) -> WcharString {
@@ -225,9 +221,9 @@ fn hid_enumerate() -> HidResult<Vec<DeviceInfo>> {
 
     let device_set = unsafe { IOHIDManagerCopyDevices(manager.0) };
     let devices = if !device_set.is_null() {
+        let set = unsafe { CFSet::<*const c_void>::wrap_under_get_rule(device_set) };
+        let mut v = vec![ptr::null::<IOHIDDeviceRef>(); set.len()];
         unsafe {
-            let ndevices = CFSetGetCount(device_set) as usize;
-            let mut v = vec![ptr::null::<IOHIDDeviceRef>(); ndevices];
             CFSetGetValues(device_set, v.as_mut_ptr() as *mut _);
             v
         }
@@ -256,30 +252,32 @@ fn hid_device_info_with_usage(device: Device, usage_page: u16, usage: u16) -> Op
     };
 
     let transport_prop = unsafe { IOHIDDeviceGetProperty(device.0, CFSTR(kIOHIDTransportKey)) };
-    let bus_type =
-        if !transport_prop.is_null() && unsafe { CFGetTypeID(transport_prop) == CFStringGetTypeID() } {
-            let transport = transport_prop as CFStringRef;
-            if unsafe { CFStringCompare(transport, CFSTR(kIOHIDTransportUSBValue), 0) }
-                == CFComparisonResult::EqualTo
-            {
-                BusType::Usb
-            } else if unsafe { CFStringHasPrefix(transport, CFSTR(kIOHIDTransportBluetoothValue)) } != 0 {
-                // Matches "Bluetooth", "BluetoothLowEnergy" and "Bluetooth Low Energy" strings
-                BusType::Bluetooth
-            } else if unsafe { CFStringCompare(transport, CFSTR(kIOHIDTransportI2CValue), 0) }
-                == CFComparisonResult::EqualTo
-            {
-                BusType::I2c
-            } else if unsafe { CFStringCompare(transport, CFSTR(kIOHIDTransportSPIValue), 0) }
-                == CFComparisonResult::EqualTo
-            {
-                BusType::Spi
-            } else {
-                BusType::Unknown
-            }
+    let bus_type = if !transport_prop.is_null()
+        && unsafe { CFGetTypeID(transport_prop) == CFStringGetTypeID() }
+    {
+        let transport = transport_prop as CFStringRef;
+        if unsafe { CFStringCompare(transport, CFSTR(kIOHIDTransportUSBValue), 0) }
+            == CFComparisonResult::EqualTo
+        {
+            BusType::Usb
+        } else if unsafe { CFStringHasPrefix(transport, CFSTR(kIOHIDTransportBluetoothValue)) } != 0
+        {
+            // Matches "Bluetooth", "BluetoothLowEnergy" and "Bluetooth Low Energy" strings
+            BusType::Bluetooth
+        } else if unsafe { CFStringCompare(transport, CFSTR(kIOHIDTransportI2CValue), 0) }
+            == CFComparisonResult::EqualTo
+        {
+            BusType::I2c
+        } else if unsafe { CFStringCompare(transport, CFSTR(kIOHIDTransportSPIValue), 0) }
+            == CFComparisonResult::EqualTo
+        {
+            BusType::Spi
         } else {
             BusType::Unknown
-        };
+        }
+    } else {
+        BusType::Unknown
+    };
 
     Some(DeviceInfo {
         path: lookup_path(&device),
